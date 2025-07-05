@@ -1,0 +1,84 @@
+#!/bin/bash
+
+#checking if LDAP is running in the server 
+ldap_status=$(systemctl is-active nslcd)
+if [ "$ldap_status" == "active" ]; then
+        echo -e '\n\n\n'
+        echo "==================================="
+    echo "LDAP is running,sssd convertion not possible"
+        echo "==================================="
+else
+        echo "==================================="
+    echo "LDAP is not running "
+        echo "==================================="
+fi
+
+#checking if sssd is running 
+sssd_status=$(systemctl is-active sssd)
+if [ "$sssd_status" == "active" ]; then 
+        echo -e '\n\n\n'
+        echo "==================================="
+    echo "SSSD is running,"
+        echo "==================================="
+fi
+
+#display the sssd status 
+if [[ "${?}" -ne 1 ]]
+then
+    echo "looks like sssd is not active displaying the status of sssd"
+    systemctl status sssd
+fi     
+
+#joing to AD if required
+ad_join() {
+
+    echo "joining the SSSD to AD"
+    ENV=$(/repository/DCdetails.sh $(hostname -f))
+    if [[ "$ENV" == *"DC1"* ]]; then
+        echo "ENV contains DC1"
+        realm leave -U <domain name1 >
+        /usr/sbin/realm -vvv join <ip> --user=<username>--computer-ou="OU=Unix--client-software=sssd 
+    elif [[ "$ENV" == *"DC2"* ]]; then
+        echo "ENV contains DC2"
+        realm leave -U <domain name1 >
+        /usr/sbin/realm -vvv join <ip> --user=<username>--computer-ou="OU=Unix--client-software=sssd 
+    else
+        echo "ENV does not contain DC1 or DC2, so will be using DC3"
+        realm leave -U <domain name1 >
+        /usr/sbin/realm -vvv join <ip> --user=<username>--computer-ou="OU=Unix--client-software=sssd 
+    fi
+}
+while [[ true ]]
+do 
+    read -p "Enter y to join the server to AD : " input
+    if [[ "$input" == "y" ]]; then
+        echo "joining the server to AD"
+        ad_join
+        break
+    fi
+done 
+
+#changing the /etc/sssd/sssd.conf file if required
+echo "taking backup of /etc/sssd/sssd.conf file "
+backup_file() {
+
+    local FILE="${1}"
+    #checking if file exits 
+    if [[ -f "${FILE}" ]]
+    then 
+        local BACKUP_FILE="/var/tmp/$(basename ${FILE}).$(date +%F-%N)"
+        cp -p ${FILE} ${BACKUP_FILE}
+    else
+        return 1
+    fi
+}
+
+backup_file '/etc/sssd/sssd.conf'
+echo "backup has been taken and stored in /var/tmp, editing the sssd file "
+cp /repository/filesssd.txt /etc/sssd/sssd.conf 
+sed -i "s/Adminhostname/Admin$(hostname)/g" /etc/sssd/sssd.conf
+sed -i "23s/.\{10\}\$//" /etc/sssd/sssd.conf
+
+#restarting SSSD 
+echo "restarting the SSSD"
+systemctl stop sssd; rm -f /var/lib/sss/db/* /var/log/sssd/* ;systemctl start sssd
