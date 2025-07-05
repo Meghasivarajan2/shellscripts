@@ -1,0 +1,34 @@
+#!/bin/bash
+
+log() { 
+
+#this fucion can send message to syslog 
+    local MESSAGE="${@}"
+    if [[ "${VERBOSE}" = 'true' ]]
+    then 
+    echo "${MESSAGE}"
+    fi
+    logger -t function.sh "${MESSAGE}"
+
+}
+
+
+backup_file() {
+
+    local FILE="${1}"
+    #checking if file exits 
+    if [[ -f "${FILE}" ]]
+    then 
+        local BACKUP_FILE="/var/tmp/$(basename ${FILE}).$(date +%F-%N)"
+        log "backip up file from ${FILE} to ${BACKUP_FILE}"
+        cp -p ${FILE} ${BACKUP_FILE}
+    else
+        return 1
+    fi
+}
+
+readonly VERBOSE='true'
+backup_file '/etc/passwd'
+backup_file '/etc/host'
+backup_file '/etc/fstab'
+backup_file '/etc/sysconfig/network-scripts'
